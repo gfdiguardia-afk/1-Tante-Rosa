@@ -29,8 +29,8 @@
         td { border-bottom: 1px solid #f9f9f9; padding: 12px 2px; height: 50px; }
         
         .row-virtual { font-style: italic; color: #888; }
-        /* Neue Klassen für die farbliche Markierung */
-        .row-suggested.highlight-yellow { background-color: #fff9c4; }
+        /* Markierung für den aktiven Vorschlag */
+        .highlight-yellow { background-color: #fff9c4 !important; }
         
         .btn-edit { background: none; font-size: 1.2rem; cursor: pointer; border: none; padding: 5px; }
         .btn-del { color: #ff1744; background: none; border: none; font-size: 1.1rem; cursor: pointer; }
@@ -49,7 +49,7 @@
 
     <div class="input-box">
         <label id="input-label">Wann ging es los?</label>
-        <input type="date" id="date-field" oninput="removeHighlight()">
+        <input type="date" id="date-field" onchange="checkManualChange()">
         <button class="btn-today" onclick="setToday()">Heute</button>
         <button class="btn-main" id="save-btn" onclick="handleSave()">Anfang speichern</button>
     </div>
@@ -73,6 +73,7 @@
     let isWaitingForEnd = false;
     let cachedAvgCycle = 28;
     let cachedAvgDuration = 5;
+    let suggestedDate = ""; // Speichert den aktuellen Vorschlagswert
 
     document.addEventListener('DOMContentLoaded', () => {
         refreshUI();
@@ -89,12 +90,20 @@
 
     function setToday() { 
         document.getElementById('date-field').valueAsDate = new Date(); 
-        removeHighlight();
+        checkManualChange();
     }
 
-    function removeHighlight() {
-        const row = document.querySelector('.row-suggested');
-        if (row) row.classList.remove('highlight-yellow');
+    // Prüft ob der Nutzer das Datum manuell geändert hat (weg vom Vorschlag)
+    function checkManualChange() {
+        const currentVal = document.getElementById('date-field').value;
+        const row = document.querySelector('.row-virtual');
+        if (row) {
+            if (currentVal === suggestedDate) {
+                row.classList.add('highlight-yellow');
+            } else {
+                row.classList.remove('highlight-yellow');
+            }
+        }
     }
 
     function handleSave() {
@@ -111,6 +120,7 @@
         
         localStorage.setItem('periodHistory', JSON.stringify(history));
         document.getElementById('date-field').value = "";
+        suggestedDate = "";
         refreshUI();
     }
 
@@ -158,27 +168,29 @@
             nextPredictedEnd.setDate(nextPredictedStart.getDate() + Math.round(cachedAvgDuration) - 1);
             document.getElementById('next-range').innerText = `${formatDateShort(nextPredictedStart)} – ${formatDateShort(nextPredictedEnd)}`;
 
-            // VORSCHLAG-ZEILE
+            // VORSCHLAG-LOGIK
             let expectedStart = new Date(lastStart);
             expectedStart.setDate(lastStart.getDate() + Math.round(cachedAvgCycle));
             
             if (!isWaitingForEnd && expectedStart <= today) {
                 let virtualEnd = new Date(expectedStart);
                 virtualEnd.setDate(expectedStart.getDate() + Math.round(cachedAvgDuration) - 1);
+                let dateStr = expectedStart.toISOString().split('T')[0];
                 
-                tbody.innerHTML += `<tr class="row-virtual row-suggested">
-                    <td>${formatDateLong(expectedStart)} <button class="btn-edit" onclick="triggerEdit('${expectedStart.toISOString().split('T')[0]}')">✏️</button></td>
+                tbody.innerHTML += `<tr class="row-virtual">
+                    <td>${formatDateLong(expectedStart)} <button class="btn-edit" onclick="triggerEdit('${dateStr}')">✏️</button></td>
                     <td>${formatDateLong(virtualEnd)}</td>
                     <td>Vorschlag</td>
                     <td align="right"></td>
                 </tr>`;
             } else if (isWaitingForEnd) {
-                // Falls wir auf das Ende warten, schlagen wir das Enddatum vor
                 let virtualEnd = new Date(lastStart);
                 virtualEnd.setDate(lastStart.getDate() + Math.round(cachedAvgDuration) - 1);
-                tbody.innerHTML += `<tr class="row-virtual row-suggested">
+                let dateStr = virtualEnd.toISOString().split('T')[0];
+
+                tbody.innerHTML += `<tr class="row-virtual">
                     <td>${formatDateLong(lastStart)}</td>
-                    <td>${formatDateLong(virtualEnd)} <button class="btn-edit" onclick="triggerEdit('${virtualEnd.toISOString().split('T')[0]}')">✏️</button></td>
+                    <td>${formatDateLong(virtualEnd)} <button class="btn-edit" onclick="triggerEdit('${dateStr}')">✏️</button></td>
                     <td>Vorschlag</td>
                     <td align="right"></td>
                 </tr>`;
@@ -201,14 +213,15 @@
     }
 
     function triggerEdit(dateStr) {
+        suggestedDate = dateStr;
         const field = document.getElementById('date-field');
         field.value = dateStr;
-        // Zeile gelb markieren
-        const row = document.querySelector('.row-suggested');
+        
+        // Markierung hinzufügen
+        const row = document.querySelector('.row-virtual');
         if (row) row.classList.add('highlight-yellow');
         
         field.focus();
-        field.click(); 
     }
 
     function formatDateShort(d) { return new Date(d).toLocaleDateString('de-DE', {day:'2-digit', month:'2-digit'}); }
