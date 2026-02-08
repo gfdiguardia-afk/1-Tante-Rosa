@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>Tante Rosa</title>
+    <title>Aunt Rosa</title>
     <style>
         :root { --pink: #d81b60; --light-pink: #fff0f5; }
         body { font-family: -apple-system, sans-serif; background-color: var(--light-pink); display: flex; justify-content: center; padding: 40px 20px; margin: 0; }
@@ -35,7 +35,7 @@
 <body>
 
 <div class="card">
-    <h1>Tante Rosa 🌸</h1>
+    <h1 id="main-title">Aunt Rosa 🍆</h1>
 
     <div class="prediction">
         <p>Voraussichtlicher Zeitraum:</p>
@@ -82,6 +82,8 @@
         isWaitingForEnd = waiting;
         document.getElementById('input-label').innerText = isWaitingForEnd ? "Wann war es zu Ende?" : "Wann ging es los?";
         document.getElementById('save-btn').innerText = isWaitingForEnd ? "Ende speichern" : "Anfang speichern";
+        // Logik für das Icon im Titel
+        document.getElementById('main-title').innerText = isWaitingForEnd ? "Aunt Rosa 🌸" : "Aunt Rosa 🍆";
     }
 
     function setToday() { document.getElementById('date-field').valueAsDate = new Date(); }
@@ -167,8 +169,8 @@
         const icsContent = [
             "BEGIN:VCALENDAR", "VERSION:2.0", "BEGIN:VEVENT",
             `DTSTART;VALUE=DATE:${start}`, `DTEND;VALUE=DATE:${end}`,
-            "SUMMARY:Tante Rosa 🌸", "DESCRIPTION:Voraussichtlicher Zeitraum",
-            "BEGIN:VALARM", "TRIGGER:-P1D", "ACTION:DISPLAY", "DESCRIPTION:Tante Rosa kommt morgen", "END:VALARM",
+            "SUMMARY:Aunt Rosa 🌸", "DESCRIPTION:Voraussichtlicher Zeitraum",
+            "BEGIN:VALARM", "TRIGGER:-P1D", "ACTION:DISPLAY", "DESCRIPTION:Aunt Rosa kommt morgen", "END:VALARM",
             "END:VEVENT", "END:VCALENDAR"
         ].join("%0A");
 
@@ -179,6 +181,10 @@
         if(confirm("Eintrag löschen?")) {
             let history = getHistory().filter(e => e.id !== id);
             localStorage.setItem('periodHistory', JSON.stringify(history));
+            // Falls der gelöschte Eintrag der aktive war, Modus zurücksetzen
+            if (history.length === 0 || history[0].end) {
+                setMode(false);
+            }
             refreshUI();
         }
     }
