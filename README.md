@@ -15,10 +15,11 @@
         .prediction p { margin: 0; color: #ad1457; font-weight: bold; }
         .prediction h2 { margin: 10px 0 10px 0; font-size: 1.4rem; color: var(--pink); }
         
+        .btn-reminder { background-color: white; color: var(--pink); border: 1px solid var(--pink); padding: 10px; border-radius: 12px; font-size: 0.85rem; font-weight: bold; cursor: pointer; display: none; margin: 10px auto 0 auto; width: 100%; }
+        
         .input-box { background: #fdfdfd; padding: 20px; border-radius: 20px; border: 1px solid #eee; text-align: center; }
         label { display: block; margin-bottom: 12px; font-weight: bold; color: #555; }
-        input[type="date"] { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 12px; font-size: 1rem; margin-bottom: 10px; box-sizing: border-box; -webkit-appearance: none; background: white; }
-        
+        input[type="date"] { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 12px; font-size: 1rem; margin-bottom: 10px; box-sizing: border-box; -webkit-appearance: none; }
         button { width: 100%; padding: 15px; border: none; border-radius: 12px; font-size: 1rem; font-weight: bold; cursor: pointer; transition: 0.2s; }
         .btn-main { background-color: var(--pink); color: white; margin-top: 10px; }
         .btn-today { background-color: #f06292; color: white; padding: 10px; font-size: 0.9rem; margin-bottom: 5px; }
@@ -26,14 +27,8 @@
         .history { margin-top: 30px; }
         table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
         th { text-align: left; color: #888; font-size: 0.7rem; text-transform: uppercase; padding-bottom: 10px; }
-        td { border-bottom: 1px solid #f9f9f9; padding: 12px 2px; height: 50px; }
-        
-        .row-virtual { font-style: italic; color: #888; }
-        /* Markierung für den aktiven Vorschlag */
-        .highlight-yellow { background-color: #fff9c4 !important; }
-        
-        .btn-edit { background: none; font-size: 1.2rem; cursor: pointer; border: none; padding: 5px; }
-        .btn-del { color: #ff1744; background: none; border: none; font-size: 1.1rem; cursor: pointer; }
+        td { border-bottom: 1px solid #f9f9f9; padding: 12px 2px; }
+        .btn-del { color: #ff1744; background: none; width: auto; padding: 5px; font-size: 1.1rem; font-weight: bold; }
         .duration-tag { color: #888; font-style: italic; }
     </style>
 </head>
@@ -43,13 +38,14 @@
     <h1 id="main-title">Aunt Rosa 🍆</h1>
 
     <div class="prediction">
-        <p>Nächste Periode erwartet:</p>
+        <p>Voraussichtlicher Zeitraum:</p>
         <h2 id="next-range">Berechnung läuft...</h2>
+        <button id="remind-btn" class="btn-reminder" onclick="addToCalendar()">📅 Zeitraum im Kalender speichern</button>
     </div>
 
     <div class="input-box">
         <label id="input-label">Wann ging es los?</label>
-        <input type="date" id="date-field" onchange="checkManualChange()">
+        <input type="date" id="date-field">
         <button class="btn-today" onclick="setToday()">Heute</button>
         <button class="btn-main" id="save-btn" onclick="handleSave()">Anfang speichern</button>
     </div>
@@ -71,11 +67,12 @@
 
 <script>
     let isWaitingForEnd = false;
-    let cachedAvgCycle = 28;
-    let cachedAvgDuration = 5;
-    let suggestedDate = ""; // Speichert den aktuellen Vorschlagswert
+    let globalNextStart = null;
+    let globalNextEnd = null;
 
     document.addEventListener('DOMContentLoaded', () => {
+        const history = getHistory();
+        setMode(history.length > 0 && !history[0].end);
         refreshUI();
     });
 
@@ -88,115 +85,34 @@
         document.getElementById('main-title').innerText = isWaitingForEnd ? "Aunt Rosa 🌸" : "Aunt Rosa 🍆";
     }
 
-    function setToday() { 
-        document.getElementById('date-field').valueAsDate = new Date(); 
-        checkManualChange();
-    }
-
-    // Prüft ob der Nutzer das Datum manuell geändert hat (weg vom Vorschlag)
-    function checkManualChange() {
-        const currentVal = document.getElementById('date-field').value;
-        const row = document.querySelector('.row-virtual');
-        if (row) {
-            if (currentVal === suggestedDate) {
-                row.classList.add('highlight-yellow');
-            } else {
-                row.classList.remove('highlight-yellow');
-            }
-        }
-    }
+    function setToday() { document.getElementById('date-field').valueAsDate = new Date(); }
 
     function handleSave() {
         const dateVal = document.getElementById('date-field').value;
         if (!dateVal) return alert("Datum wählen!");
         let history = getHistory();
-        
         if (!isWaitingForEnd) {
             history.unshift({ id: Date.now(), start: dateVal, end: null });
+            setMode(true);
         } else {
             if (new Date(dateVal) < new Date(history[0].start)) return alert("Fehler: Ende vor Anfang!");
             history[0].end = dateVal;
+            setMode(false);
         }
-        
         localStorage.setItem('periodHistory', JSON.stringify(history));
         document.getElementById('date-field').value = "";
-        suggestedDate = "";
         refreshUI();
     }
 
     function refreshUI() {
-        calculateStats();
-        const history = getHistory();
-        setMode(history.length > 0 && !history[0].end);
         renderHistory();
-    }
-
-    function calculateStats() {
-        const history = getHistory().filter(e => e.start && e.end);
-        if (history.length < 2) {
-            cachedAvgCycle = 28;
-            cachedAvgDuration = 5;
-            return;
-        }
-        const sorted = [...history].sort((a,b) => new Date(a.start) - new Date(b.start));
-        let cycleLengths = [];
-        for (let i = 0; i < sorted.length - 1; i++) {
-            const diff = (new Date(sorted[i+1].start) - new Date(sorted[i].start)) / 86400000;
-            if (diff >= 20 && diff <= 45) cycleLengths.push(diff);
-        }
-        let count = cycleLengths.length > 10 ? 12 : (cycleLengths.length > 4 ? 6 : 3);
-        const recentCycles = cycleLengths.slice(-count);
-        cachedAvgCycle = recentCycles.length > 0 ? recentCycles.reduce((a,b)=>a+b,0)/recentCycles.length : 28;
-        const durations = history.map(e => (new Date(e.end)-new Date(e.start))/86400000 + 1);
-        cachedAvgDuration = durations.reduce((a,b)=>a+b,0)/durations.length;
+        calculate();
     }
 
     function renderHistory() {
         const history = getHistory();
         const tbody = document.querySelector('#history-table tbody');
         tbody.innerHTML = '';
-        const today = new Date();
-        today.setHours(0,0,0,0);
-
-        if (history.length > 0) {
-            let lastStart = new Date(history[0].start);
-            let nextPredictedStart = new Date(lastStart);
-            while (nextPredictedStart <= today) {
-                nextPredictedStart.setDate(nextPredictedStart.getDate() + Math.round(cachedAvgCycle));
-            }
-            let nextPredictedEnd = new Date(nextPredictedStart);
-            nextPredictedEnd.setDate(nextPredictedStart.getDate() + Math.round(cachedAvgDuration) - 1);
-            document.getElementById('next-range').innerText = `${formatDateShort(nextPredictedStart)} – ${formatDateShort(nextPredictedEnd)}`;
-
-            // VORSCHLAG-LOGIK
-            let expectedStart = new Date(lastStart);
-            expectedStart.setDate(lastStart.getDate() + Math.round(cachedAvgCycle));
-            
-            if (!isWaitingForEnd && expectedStart <= today) {
-                let virtualEnd = new Date(expectedStart);
-                virtualEnd.setDate(expectedStart.getDate() + Math.round(cachedAvgDuration) - 1);
-                let dateStr = expectedStart.toISOString().split('T')[0];
-                
-                tbody.innerHTML += `<tr class="row-virtual">
-                    <td>${formatDateLong(expectedStart)} <button class="btn-edit" onclick="triggerEdit('${dateStr}')">✏️</button></td>
-                    <td>${formatDateLong(virtualEnd)}</td>
-                    <td>Vorschlag</td>
-                    <td align="right"></td>
-                </tr>`;
-            } else if (isWaitingForEnd) {
-                let virtualEnd = new Date(lastStart);
-                virtualEnd.setDate(lastStart.getDate() + Math.round(cachedAvgDuration) - 1);
-                let dateStr = virtualEnd.toISOString().split('T')[0];
-
-                tbody.innerHTML += `<tr class="row-virtual">
-                    <td>${formatDateLong(lastStart)}</td>
-                    <td>${formatDateLong(virtualEnd)} <button class="btn-edit" onclick="triggerEdit('${dateStr}')">✏️</button></td>
-                    <td>Vorschlag</td>
-                    <td align="right"></td>
-                </tr>`;
-            }
-        }
-
         history.forEach(entry => {
             let durationText = "";
             if(entry.start && entry.end) {
@@ -212,25 +128,100 @@
         });
     }
 
-    function triggerEdit(dateStr) {
-        suggestedDate = dateStr;
-        const field = document.getElementById('date-field');
-        field.value = dateStr;
-        
-        // Markierung hinzufügen
-        const row = document.querySelector('.row-virtual');
-        if (row) row.classList.add('highlight-yellow');
-        
-        field.focus();
-    }
-
     function formatDateShort(d) { return new Date(d).toLocaleDateString('de-DE', {day:'2-digit', month:'2-digit'}); }
     function formatDateLong(d) { return new Date(d).toLocaleDateString('de-DE', {day:'2-digit', month:'2-digit', year:'numeric'}); }
+
+    function calculate() {
+        const history = getHistory().filter(e => e.start && e.end);
+        const sorted = [...history].sort((a,b) => new Date(a.start) - new Date(b.start));
+        
+        // --- 1. Lückenschutz & Abstände sammeln ---
+        let intervals = [];
+        for (let i = 0; i < sorted.length - 1; i++) {
+            const diff = (new Date(sorted[i+1].start) - new Date(sorted[i].start)) / 86400000;
+            // Filter: Nur Abstände zwischen 20 und 45 Tagen (Lückenschutz)
+            if (diff >= 20 && diff <= 45) {
+                intervals.push(diff);
+            }
+        }
+
+        // --- 2. Gestaffelte Dynamik ---
+        let avgCycle = 28;
+        const count = intervals.length;
+
+        if (count >= 1 && count < 3) {
+            // Zu wenig Daten für Statistik, nutze Standard
+            avgCycle = 28;
+        } else if (count >= 3 && count <= 6) {
+            // Nutze Durchschnitt der letzten 3 verfügbaren Intervalle
+            const last3 = intervals.slice(-3);
+            avgCycle = last3.reduce((a,b) => a+b, 0) / last3.length;
+        } else if (count >= 7 && count <= 12) {
+            // Nutze Durchschnitt der letzten 6 verfügbaren Intervalle
+            const last6 = intervals.slice(-6);
+            avgCycle = last6.reduce((a,b) => a+b, 0) / last6.length;
+        } else if (count > 12) {
+            // Maximum: Letzte 12 Intervalle
+            const last12 = intervals.slice(-12);
+            avgCycle = last12.reduce((a,b) => a+b, 0) / last12.length;
+        }
+
+        // Durchschnittliche Dauer der Blutung (für das Ende-Datum)
+        const avgDur = history.length > 0 
+            ? history.map(e => (new Date(e.end)-new Date(e.start))/86400000).reduce((a,b)=>a+b,0)/history.length 
+            : 5;
+
+        // --- 3. Intelligente Hochrechnung ---
+        if (sorted.length === 0) {
+            document.getElementById('next-range').innerText = "Warte auf Daten...";
+            return;
+        }
+
+        let nextStart = new Date(sorted[sorted.length-1].start);
+        const today = new Date(); 
+        today.setHours(0,0,0,0);
+
+        // Springe so lange vorwärts, bis das Datum in der Zukunft liegt
+        // (Berücksichtigt vergessene Monate)
+        while (nextStart <= today) { 
+            nextStart.setDate(nextStart.getDate() + Math.round(avgCycle)); 
+        }
+        
+        globalNextStart = new Date(nextStart);
+        let nextEnd = new Date(nextStart);
+        nextEnd.setDate(nextStart.getDate() + Math.round(avgDur));
+        globalNextEnd = new Date(nextEnd);
+
+        document.getElementById('next-range').innerText = `${formatDateShort(nextStart)} – ${formatDateShort(nextEnd)}`;
+        document.getElementById('remind-btn').style.display = 'block';
+    }
+
+    function addToCalendar() {
+        if (!globalNextStart || !globalNextEnd) return;
+        const formatDateICS = (date) => date.toISOString().split('T')[0].replace(/-/g, "");
+        const start = formatDateICS(globalNextStart);
+        const calendarEnd = new Date(globalNextEnd);
+        calendarEnd.setDate(calendarEnd.getDate() + 1);
+        const end = formatDateICS(calendarEnd);
+
+        const icsContent = [
+            "BEGIN:VCALENDAR", "VERSION:2.0", "BEGIN:VEVENT",
+            `DTSTART;VALUE=DATE:${start}`, `DTEND;VALUE=DATE:${end}`,
+            "SUMMARY:Aunt Rosa 🌸", "DESCRIPTION:Voraussichtlicher Zeitraum",
+            "BEGIN:VALARM", "TRIGGER:-P1D", "ACTION:DISPLAY", "DESCRIPTION:Aunt Rosa kommt morgen", "END:VALARM",
+            "END:VEVENT", "END:VCALENDAR"
+        ].join("%0A");
+
+        window.open("data:text/calendar;charset=utf8," + icsContent);
+    }
 
     function deleteItem(id) {
         if(confirm("Eintrag löschen?")) {
             let history = getHistory().filter(e => e.id !== id);
             localStorage.setItem('periodHistory', JSON.stringify(history));
+            if (history.length === 0 || history[0].end) {
+                setMode(false);
+            }
             refreshUI();
         }
     }
